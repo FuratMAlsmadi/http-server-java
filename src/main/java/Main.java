@@ -50,25 +50,27 @@ public class Main {
 
         // Expecting the request to be of the form: GET /echo/abc HTTP/1.1
         String[] pathParts = requestParts.get(1).split("/");
-        if (pathParts.length < 3) {
-          System.out.println("Unexpected request path format.");
-          return;
+        System.out.println("Path parts: " + Arrays.toString(pathParts));
+        if (pathParts.length == 0) {
+          clientSocket.getOutputStream().write(HTTP_OK_RESPONSE.getBytes(StandardCharsets.UTF_8));
+        } else if (pathParts.length >= 3 && pathParts[1].equals("echo")) {
+          // The "content" is extracted from the path (e.g., "abc").
+          String content = pathParts[2];
+          System.out.println("Content: " + content);
+
+          // Build the response.
+          String responseBody = content;
+          String response = HTTP_OK_RESPONSE +
+              CONTENT_TYPE_HEADER_PLAIN_TEXT +
+              String.format("Content-Length: %d\r\n\r\n", responseBody.length()) +
+              responseBody;
+          System.out.println("Response:\n" + response);
+
+          // Write the response using the correct charset.
+          clientSocket.getOutputStream().write(response.getBytes(StandardCharsets.UTF_8));
+        } else {
+          clientSocket.getOutputStream().write(HTTP_NOT_FOUND_RESPONSE.getBytes(StandardCharsets.UTF_8));
         }
-
-        // The "content" is extracted from the path (e.g., "abc").
-        String content = pathParts[2];
-        System.out.println("Content: " + content);
-
-        // Build the response.
-        String responseBody = content;
-        String response = HTTP_OK_RESPONSE +
-            CONTENT_TYPE_HEADER_PLAIN_TEXT +
-            String.format("Content-Length: %d\r\n\r\n", responseBody.length()) +
-            responseBody;
-        System.out.println("Response:\n" + response);
-
-        // Write the response using the correct charset.
-        clientSocket.getOutputStream().write(response.getBytes(StandardCharsets.UTF_8));
 
       }
     } catch (IOException e) {
