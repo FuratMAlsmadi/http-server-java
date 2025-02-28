@@ -1,8 +1,6 @@
 import java.io.BufferedReader;
 import java.io.IOException;
-import java.io.InputStream;
 import java.io.InputStreamReader;
-import java.lang.reflect.Array;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.nio.charset.StandardCharsets;
@@ -52,7 +50,7 @@ public class Main {
         String[] pathParts = requestParts.get(1).split("/");
         System.out.println("Path parts: " + Arrays.toString(pathParts));
         if (pathParts.length == 0) {
-          clientSocket.getOutputStream().write(HTTP_OK_RESPONSE.getBytes(StandardCharsets.UTF_8));
+          clientSocket.getOutputStream().write((HTTP_OK_RESPONSE+"\r\n").getBytes(StandardCharsets.UTF_8));
         } else if (pathParts.length >= 3 && pathParts[1].equals("echo")) {
           // The "content" is extracted from the path (e.g., "abc").
           String content = pathParts[2];
@@ -69,7 +67,7 @@ public class Main {
           // Write the response using the correct charset.
           clientSocket.getOutputStream().write(response.getBytes(StandardCharsets.UTF_8));
         } else {
-          clientSocket.getOutputStream().write(HTTP_NOT_FOUND_RESPONSE.getBytes(StandardCharsets.UTF_8));
+          clientSocket.getOutputStream().write((HTTP_NOT_FOUND_RESPONSE+"\r\n").getBytes(StandardCharsets.UTF_8));
         }
 
       }
