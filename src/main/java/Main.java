@@ -1,6 +1,12 @@
+import java.io.BufferedReader;
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.lang.reflect.Array;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.util.Arrays;
+import java.util.List;
 
 public class Main {
   public static void main(String[] args) {
@@ -18,7 +24,17 @@ public class Main {
     
       Socket clientSocket = serverSocket.accept(); // Wait for connection from client.
       System.out.println("accepted new connection");
-      clientSocket.getOutputStream().write("HTTP/1.1 200 OK\r\n\r\n".getBytes());
+
+      InputStream inputStream = clientSocket.getInputStream();
+      InputStreamReader inputStreamReader = new InputStreamReader(inputStream, "Utf-8");
+      BufferedReader bufferedReader = new BufferedReader(inputStreamReader);
+      List<String> requestStringList = Arrays.asList(bufferedReader.readLine().split("\\s+"));
+      if(requestStringList.get(1).equals("/")) {
+        clientSocket.getOutputStream().write("HTTP/1.1 200 OK\r\n\r\n".getBytes());
+      }
+      else {
+        clientSocket.getOutputStream().write("HTTP/1.1 404 Not Found\r\n\r\n".getBytes());
+      }
 
     } catch (IOException e) {
       System.out.println("IOException: " + e.getMessage());
