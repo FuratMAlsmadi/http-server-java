@@ -4,6 +4,7 @@ import java.io.InputStreamReader;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 
@@ -20,7 +21,7 @@ public class Main {
 
     // Uncomment this block to pass the first stage
 
-    try (ServerSocket serverSocket = new ServerSocket(4221)) {
+    try (ServerSocket serverSocket = new ServerSocket(PORT)) {
       // Since the tester restarts your program quite often, setting SO_REUSEADDR
       // ensures that we don't run into 'Address already in use' errors
       serverSocket.setReuseAddress(true);
@@ -31,26 +32,31 @@ public class Main {
         // Wait for connection from client.
         System.out.println("accepted new connection");
 
+        List<String> requestParts = new ArrayList<>();
+        String inputLine;
+        while ((inputLine = bufferedReader.readLine()) != null && !inputLine.trim().equals("")) {
+          requestParts.add(inputLine);
+        }
         // Read the request line and split into parts.
-        String requestLine = bufferedReader.readLine();
+        String requestLine = requestParts.get(0);
         if (requestLine == null) {
           System.out.println("Empty request received.");
           return;
         }
 
-        List<String> requestParts = Arrays.asList(requestLine.split(" "));
+        List<String> requesLinetParts = Arrays.asList(requestLine.split(" "));
 
-        System.out.println(requestParts); // [GET, /echo/abc, HTTP/1.1]
-        if (requestParts.size() < 2) {
+        System.out.println(requesLinetParts); // [GET, /echo/abc, HTTP/1.1]
+        if (requesLinetParts.size() < 2) {
           System.out.println("Invalid request format.");
           return;
         }
 
         // Expecting the request to be of the form: GET /echo/abc HTTP/1.1
-        String[] pathParts = requestParts.get(1).split("/");
+        String[] pathParts = requesLinetParts.get(1).split("/");
         System.out.println("Path parts: " + Arrays.toString(pathParts));
         if (pathParts.length == 0) {
-          clientSocket.getOutputStream().write((HTTP_OK_RESPONSE+"\r\n").getBytes(StandardCharsets.UTF_8));
+          clientSocket.getOutputStream().write((HTTP_OK_RESPONSE + "\r\n").getBytes(StandardCharsets.UTF_8));
         } else if (pathParts.length >= 3 && pathParts[1].equals("echo")) {
           // The "content" is extracted from the path (e.g., "abc").
           String content = pathParts[2];
@@ -66,10 +72,21 @@ public class Main {
 
           // Write the response using the correct charset.
           clientSocket.getOutputStream().write(response.getBytes(StandardCharsets.UTF_8));
+        } else if (pathParts.length >= 2 && pathParts[1].equals("user-agent")) {
+          for (String part : requestParts) {
+            if (part.startsWith("User-Agent: ")) {
+              String userAgent = part.substring("User-Agent: ".length());
+              String response = HTTP_OK_RESPONSE +
+              CONTENT_TYPE_HEADER_PLAIN_TEXT +
+              String.format("Content-Length: %d\r\n\r\n", userAgent.length()) +
+              userAgent;
+              clientSocket.getOutputStream().write(response.getBytes(StandardCharsets.UTF_8));
+              break;
+            }
+          }
         } else {
-          clientSocket.getOutputStream().write((HTTP_NOT_FOUND_RESPONSE+"\r\n").getBytes(StandardCharsets.UTF_8));
+          clientSocket.getOutputStream().write((HTTP_NOT_FOUND_RESPONSE + "\r\n").getBytes(StandardCharsets.UTF_8));
         }
-
       }
     } catch (IOException e) {
       System.out.println("IOException: " + e.getMessage());
