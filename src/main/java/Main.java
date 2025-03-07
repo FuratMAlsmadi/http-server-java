@@ -1,10 +1,15 @@
 import java.io.BufferedReader;
+import java.io.FileReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.NoSuchFileException;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -17,11 +22,25 @@ public class Main {
   private static final int PORT = 4221;
   private static final String HTTP_OK = "HTTP/1.1 200 OK";
   private static final String HTTP_NOT_FOUND = "HTTP/1.1 404 Not Found";
-  private static final String CONTENT_TYPE_PLAIN = "Content-Type: text/plain";
   private static final String CRLF = "\r\n";
 
   private enum RequestType {
-    ECHO, USER_AGENT, UNKNOWN, EMPTY
+    ECHO, USER_AGENT, UNKNOWN, EMPTY, FILE
+  }
+
+  private enum ContentType {
+    APPOCTSTREAM("Content-Type: application/octet-stream"),
+    TXTPLAIN("Content-Type: text/plain");
+
+    private final String headerValue;
+
+    ContentType(String heaaderValue) {
+      this.headerValue = heaaderValue;
+    }
+
+    public String getHeaderValue() {
+      return this.headerValue;
+    }
   }
 
   public static void main(String[] args) {
@@ -70,6 +89,9 @@ public class Main {
           break;
         case EMPTY:
           handleEmptyRequest(clientSocket.getOutputStream(), request.getContent());
+          break;
+        case FILE:
+          handleFileRequest(clientSocket.getOutputStream(), request.getContent());
           break;
         case UNKNOWN:
         default:
@@ -123,25 +145,27 @@ public class Main {
       return new HttpRequest(RequestType.ECHO, pathParts[2], userAgent);
     } else if (pathParts.length >= 2 && "user-agent".equals(pathParts[1])) {
       return new HttpRequest(RequestType.USER_AGENT, "", userAgent);
+    } else if (pathParts.length >= 3 && "files".equals(pathParts[1])) {
+      return new HttpRequest(RequestType.FILE, pathParts[2], userAgent);
     } else {
       return new HttpRequest(RequestType.UNKNOWN, "", userAgent);
     }
   }
 
   private static void handleEchoRequest(OutputStream outputStream, String content) throws IOException {
-    String response = buildResponse(HTTP_OK, CONTENT_TYPE_PLAIN, content);
+    String response = buildResponse(HTTP_OK, ContentType.TXTPLAIN, content);
     outputStream.write(response.getBytes(StandardCharsets.UTF_8));
     System.out.println("Echo response sent with content: " + content);
   }
 
   private static void handleEmptyRequest(OutputStream outputStream, String content) throws IOException {
-    String response = buildResponse(HTTP_OK, CONTENT_TYPE_PLAIN, content);
+    String response = buildResponse(HTTP_OK, ContentType.TXTPLAIN, content);
     outputStream.write(response.getBytes(StandardCharsets.UTF_8));
     System.out.println("Empty response sent with content: " + content);
   }
 
   private static void handleUserAgentRequest(OutputStream outputStream, String userAgent) throws IOException {
-    String response = buildResponse(HTTP_OK, CONTENT_TYPE_PLAIN, userAgent);
+    String response = buildResponse(HTTP_OK, ContentType.TXTPLAIN, userAgent);
     outputStream.write(response.getBytes(StandardCharsets.UTF_8));
     System.out.println("User-Agent response sent with agent: " + userAgent);
   }
@@ -152,9 +176,27 @@ public class Main {
     System.out.println("404 Not Found response sent");
   }
 
-  private static String buildResponse(String status, String contentType, String body) {
+  private static void handleFileRequest(OutputStream outputStream, String fileName) throws IOException {
+    String relativePath = "/temp/" + fileName + ".txt";
+    Path filePath = Paths.get(relativePath);
+    System.out.println(filePath);
+    StringBuilder fileContent = new StringBuilder();
+    try (BufferedReader bufferedReader = Files.newBufferedReader(filePath)) {
+      String line;
+      while ((line = bufferedReader.readLine()) != null) {
+        fileContent.append(line);
+      }
+      String response = buildResponse(HTTP_OK, ContentType.APPOCTSTREAM, fileContent.toString());
+      outputStream.write(response.getBytes(StandardCharsets.UTF_8));
+      System.out.println("File content response sent from file: " + fileName);
+    } catch (NoSuchFileException e) {
+      sendNotFoundResponse(outputStream);
+    }
+  }
+
+  private static String buildResponse(String status, ContentType contentType, String body) {
     return status + CRLF +
-        contentType + CRLF +
+        contentType.getHeaderValue() + CRLF +
         "Content-Length: " + body.length() + CRLF +
         CRLF +
         body;
