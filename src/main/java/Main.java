@@ -1,16 +1,11 @@
 import java.io.BufferedReader;
 import java.io.FileReader;
-import java.io.FileReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.NoSuchFileException;
-import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.nio.file.Files;
 import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
@@ -47,23 +42,8 @@ public class Main {
     public String getHeaderValue() {
       return this.headerValue;
     }
-    ECHO, USER_AGENT, UNKNOWN, EMPTY, FILE
   }
 
-  private enum ContentType {
-    APPOCTSTREAM("Content-Type: application/octet-stream"),
-    TXTPLAIN("Content-Type: text/plain");
-
-    private final String headerValue;
-
-    ContentType(String heaaderValue) {
-      this.headerValue = heaaderValue;
-    }
-
-    public String getHeaderValue() {
-      return this.headerValue;
-    }
-  }
 
   public static void main(String[] args) {
     if (args.length > 1 && args[0].equals("--directory")) {
@@ -115,9 +95,6 @@ public class Main {
           break;
         case EMPTY:
           handleEmptyRequest(clientSocket.getOutputStream(), request.getContent());
-          break;
-        case FILE:
-          handleFileRequest(clientSocket.getOutputStream(), request.getContent());
           break;
         case FILE:
           handleFileRequest(clientSocket.getOutputStream(), request.getContent());
@@ -185,20 +162,17 @@ public class Main {
 
   private static void handleEchoRequest(OutputStream outputStream, String content) throws IOException {
     String response = buildResponse(HTTP_OK, ContentType.TXTPLAIN, content);
-    String response = buildResponse(HTTP_OK, ContentType.TXTPLAIN, content);
     outputStream.write(response.getBytes(StandardCharsets.UTF_8));
     System.out.println("Echo response sent with content: " + content);
   }
 
   private static void handleEmptyRequest(OutputStream outputStream, String content) throws IOException {
     String response = buildResponse(HTTP_OK, ContentType.TXTPLAIN, content);
-    String response = buildResponse(HTTP_OK, ContentType.TXTPLAIN, content);
     outputStream.write(response.getBytes(StandardCharsets.UTF_8));
     System.out.println("Empty response sent with content: " + content);
   }
 
   private static void handleUserAgentRequest(OutputStream outputStream, String userAgent) throws IOException {
-    String response = buildResponse(HTTP_OK, ContentType.TXTPLAIN, userAgent);
     String response = buildResponse(HTTP_OK, ContentType.TXTPLAIN, userAgent);
     outputStream.write(response.getBytes(StandardCharsets.UTF_8));
     System.out.println("User-Agent response sent with agent: " + userAgent);
