@@ -1,15 +1,16 @@
 import java.io.BufferedReader;
-import java.io.FileReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.FileAlreadyExistsException;
 import java.nio.file.Files;
 import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.nio.file.StandardOpenOption;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -22,11 +23,12 @@ public class Main {
   private static final int PORT = 4221;
   private static final String HTTP_OK = "HTTP/1.1 200 OK";
   private static final String HTTP_NOT_FOUND = "HTTP/1.1 404 Not Found";
+  private static final String HTTP_CREATED = "HTTP/1.1 201 Created";
   private static final String CRLF = "\r\n";
-  private static  String directory;
+  private static String directory;
 
   private enum RequestType {
-    ECHO, USER_AGENT, UNKNOWN, EMPTY, FILE
+    ECHO, USER_AGENT, UNKNOWN, EMPTY, FILE, POST
   }
 
   private enum ContentType {
@@ -43,7 +45,6 @@ public class Main {
       return this.headerValue;
     }
   }
-
 
   public static void main(String[] args) {
     if (args.length > 1 && args[0].equals("--directory")) {
@@ -83,7 +84,10 @@ public class Main {
         return;
       }
 
-      HttpRequest request = parseRequest(requestHeaders);
+      int contentLength = Integer.parseInt(requestHeaders.get(5).split(":", 2)[1].trim());
+      String requestbody = readBody(reader, contentLength);
+
+      HttpRequest request = parseRequest(requestHeaders, requestbody);
 
       // Handle the request based on its type
       switch (request.getType()) {
@@ -98,6 +102,9 @@ public class Main {
           break;
         case FILE:
           handleFileRequest(clientSocket.getOutputStream(), request.getContent());
+          break;
+        case POST:
+          handlePostRequest(clientSocket.getOutputStream(), request);
           break;
         case UNKNOWN:
         default:
@@ -119,44 +126,57 @@ public class Main {
     return headers;
   }
 
-  private static HttpRequest parseRequest(List<String> headers) {
+  private static String readBody(BufferedReader reader, int contentLength) throws IOException {
+    char[] body = new char[contentLength];
+    int bytesRead = reader.read(body, 0, contentLength);
+    return new String(body, 0, bytesRead);
+  }
+
+  private static HttpRequest parseRequest(List<String> headers, String body) {
     if (headers.isEmpty()) {
       return new HttpRequest(RequestType.UNKNOWN, "", "");
     }
 
     String requestLine = headers.get(0);
     String[] requestParts = requestLine.split(" ");
-
-    if (requestParts.length < 2) {
-      System.out.println("Invalid request format: " + requestLine);
-      return new HttpRequest(RequestType.UNKNOWN, "", "");
-    }
-
-    String path = requestParts[1];
-    String[] pathParts = path.split("/");
-    System.out.println("Path parts: " + Arrays.toString(pathParts));
-
-    // Extract User-Agent if present
-    String userAgent = "";
-    for (String header : headers) {
-      if (header.startsWith("User-Agent: ")) {
-        userAgent = header.substring("User-Agent: ".length());
-        break;
-      }
-    }
-    if (pathParts.length == 0) {
-      return new HttpRequest(RequestType.EMPTY, "", userAgent);
-    }
-    if (pathParts.length >= 3 && "echo".equals(pathParts[1])) {
-      return new HttpRequest(RequestType.ECHO, pathParts[2], userAgent);
-    } else if (pathParts.length >= 2 && "user-agent".equals(pathParts[1])) {
-      return new HttpRequest(RequestType.USER_AGENT, "", userAgent);
-    } else if (pathParts.length >= 3 && "files".equals(pathParts[1])) {
-      return new HttpRequest(RequestType.FILE, pathParts[2], userAgent);
-    } else if (pathParts.length >= 3 && "files".equals(pathParts[1])) {
-      return new HttpRequest(RequestType.FILE, pathParts[2], userAgent);
+    // "POST /files/file_123 HTTP/1.1"
+    if ("POST".equals(requestParts[0].trim())) {
+      String path = requestParts[1];
+      String[] pathParts = path.split("/");
+      String fileName = pathParts[2];
+      return new HttpRequest(RequestType.POST, body, fileName);
     } else {
-      return new HttpRequest(RequestType.UNKNOWN, "", userAgent);
+      if (requestParts.length < 2) {
+        System.out.println("Invalid request format: " + requestLine);
+        return new HttpRequest(RequestType.UNKNOWN, "", "");
+      }
+
+      String path = requestParts[1];
+      String[] pathParts = path.split("/");
+      System.out.println("Path parts: " + Arrays.toString(pathParts));
+
+      // Extract User-Agent if present
+      String userAgent = "";
+      for (String header : headers) {
+        if (header.startsWith("User-Agent: ")) {
+          userAgent = header.substring("User-Agent: ".length());
+          break;
+        }
+      }
+      if (pathParts.length == 0) {
+        return new HttpRequest(RequestType.EMPTY, "", userAgent);
+      }
+      if (pathParts.length >= 3 && "echo".equals(pathParts[1])) {
+        return new HttpRequest(RequestType.ECHO, pathParts[2], userAgent);
+      } else if (pathParts.length >= 2 && "user-agent".equals(pathParts[1])) {
+        return new HttpRequest(RequestType.USER_AGENT, "", userAgent);
+      } else if (pathParts.length >= 3 && "files".equals(pathParts[1])) {
+        return new HttpRequest(RequestType.FILE, pathParts[2], userAgent);
+      } else if (pathParts.length >= 3 && "files".equals(pathParts[1])) {
+        return new HttpRequest(RequestType.FILE, pathParts[2], userAgent);
+      } else {
+        return new HttpRequest(RequestType.UNKNOWN, "", userAgent);
+      }
     }
   }
 
@@ -184,8 +204,28 @@ public class Main {
     System.out.println("404 Not Found response sent");
   }
 
+  private static void handlePostRequest(OutputStream outputStream, HttpRequest httpRequest) throws IOException {
+    Path filePath = Paths.get(directory, httpRequest.getUserAgent());
+    try {
+      Files.createDirectories(filePath.getParent());
+
+      Files.createFile(filePath);
+      System.out.println("File created at: " + filePath);
+
+      String content = httpRequest.content;
+      Files.write(filePath, content.getBytes(), StandardOpenOption.WRITE);
+
+      String response = HTTP_CREATED + CRLF + CRLF;
+      outputStream.write(response.getBytes(StandardCharsets.UTF_8));
+      System.out.println("201 Created response sent");
+
+    } catch (FileAlreadyExistsException e) {
+      System.out.println("File already exists: " + filePath);
+    }
+  }
+
   private static void handleFileRequest(OutputStream outputStream, String fileName) throws IOException {
-    Path filePath = Paths.get(directory,fileName);
+    Path filePath = Paths.get(directory, fileName);
     System.out.println(filePath);
     StringBuilder fileContent = new StringBuilder();
     try (BufferedReader bufferedReader = Files.newBufferedReader(filePath)) {
