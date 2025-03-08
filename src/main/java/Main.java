@@ -92,7 +92,9 @@ public class Main {
           break;
         }
       }
-      int contentLength = Integer.parseInt(contentLen.trim());
+
+      int contentLength = contentLen.trim().isEmpty() ? 0 : Integer.parseInt(contentLen.trim());
+
       String requestbody = "";
       if (contentLen.isEmpty())
         requestbody = readBody(reader, 0);
