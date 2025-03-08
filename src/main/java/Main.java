@@ -13,7 +13,9 @@ import java.nio.file.Paths;
 import java.nio.file.StandardOpenOption;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 
 /**
@@ -79,12 +81,13 @@ public class Main {
         new InputStreamReader(clientSocket.getInputStream(), StandardCharsets.UTF_8))) {
 
       List<String> requestHeaders = readHeaders(reader);
+      Map<String, String> requestHeadersMaped = readHeadersMaped(reader);
       if (requestHeaders.isEmpty()) {
         System.out.println("Empty request received.");
         return;
       }
 
-      int contentLength = Integer.parseInt(requestHeaders.get(5).split(":", 2)[1].trim());
+      int contentLength = Integer.parseInt(requestHeadersMaped.get("content-length").split(":", 2)[1].trim());
       String requestbody = readBody(reader, contentLength);
 
       HttpRequest request = parseRequest(requestHeaders, requestbody);
@@ -125,6 +128,20 @@ public class Main {
 
     return headers;
   }
+
+  private static Map<String, String> readHeadersMaped(BufferedReader reader) throws IOException {
+        Map<String, String> headers = new LinkedHashMap<>();
+        String line;
+
+        while ((line = reader.readLine()) != null && !line.trim().isEmpty()) {
+            String[] parts = line.split(":", 2);
+            if (parts.length == 2) {
+                headers.put(parts[0].trim().toLowerCase(), parts[1].trim()); // Normalize to lowercase
+            }
+        }
+
+        return headers;
+    }
 
   private static String readBody(BufferedReader reader, int contentLength) throws IOException {
     char[] body = new char[contentLength];
