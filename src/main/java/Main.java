@@ -54,7 +54,6 @@ public class Main {
     }
 
     System.out.println("Starting HTTP server on port " + PORT);
-    System.out.println("Starting HTTP server on port " + PORT);
     try (ServerSocket serverSocket = new ServerSocket(PORT)) {
       serverSocket.setReuseAddress(true);
       while (true) {
@@ -89,17 +88,16 @@ public class Main {
       String contentLen = "";
       for (String header : requestHeaders) {
         if (header.startsWith("Content-Length: ")) {
-          contentLen= header.substring("Content-Length: ".length());
+          contentLen = header.substring("Content-Length: ".length());
           break;
         }
       }
       int contentLength = Integer.parseInt(contentLen.trim());
       String requestbody = "";
-      if(contentLen.isEmpty())  
-        readBody(reader, 0);
+      if (contentLen.isEmpty())
+        requestbody = readBody(reader, 0);
       else
-        readBody(reader, contentLength);
-
+        requestbody = readBody(reader, contentLength);
 
       HttpRequest request = parseRequest(requestHeaders, requestbody);
 
