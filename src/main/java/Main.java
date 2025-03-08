@@ -98,7 +98,7 @@ public class Main {
       if(contentLen.isEmpty())  
         readBody(reader, 0);
       else
-        readBody(reader, contentLength)
+        readBody(reader, contentLength);
 
 
       HttpRequest request = parseRequest(requestHeaders, requestbody);
