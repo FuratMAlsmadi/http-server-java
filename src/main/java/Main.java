@@ -185,8 +185,7 @@ public class Main {
   }
 
   private static void handleFileRequest(OutputStream outputStream, String fileName) throws IOException {
-    String relativePath = directory + fileName + ".txt";
-    Path filePath = Paths.get(relativePath);
+    Path filePath = Paths.get(directory,fileName);
     System.out.println(filePath);
     StringBuilder fileContent = new StringBuilder();
     try (BufferedReader bufferedReader = Files.newBufferedReader(filePath)) {
