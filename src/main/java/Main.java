@@ -81,13 +81,19 @@ public class Main {
         new InputStreamReader(clientSocket.getInputStream(), StandardCharsets.UTF_8))) {
 
       List<String> requestHeaders = readHeaders(reader);
-      Map<String, String> requestHeadersMaped = readHeadersMaped(reader);
       if (requestHeaders.isEmpty()) {
         System.out.println("Empty request received.");
         return;
       }
 
-      int contentLength = Integer.parseInt(requestHeadersMaped.get("content-length").split(":", 2)[1].trim());
+      String contentLen = "";
+      for (String header : requestHeaders) {
+        if (header.startsWith("Content-Length: ")) {
+          contentLen= header.substring("Content-Length: ".length());
+          break;
+        }
+      }
+      int contentLength = Integer.parseInt(contentLen.trim());
       String requestbody = readBody(reader, contentLength);
 
       HttpRequest request = parseRequest(requestHeaders, requestbody);
@@ -129,19 +135,6 @@ public class Main {
     return headers;
   }
 
-  private static Map<String, String> readHeadersMaped(BufferedReader reader) throws IOException {
-        Map<String, String> headers = new LinkedHashMap<>();
-        String line;
-
-        while ((line = reader.readLine()) != null && !line.trim().isEmpty()) {
-            String[] parts = line.split(":", 2);
-            if (parts.length == 2) {
-                headers.put(parts[0].trim().toLowerCase(), parts[1].trim()); // Normalize to lowercase
-            }
-        }
-
-        return headers;
-    }
 
   private static String readBody(BufferedReader reader, int contentLength) throws IOException {
     char[] body = new char[contentLength];
@@ -237,8 +230,9 @@ public class Main {
       System.out.println("201 Created response sent");
 
     } catch (FileAlreadyExistsException e) {
-      System.out.println("File already exists: " + filePath);
-    }
+      String response = HTTP_CREATED + CRLF + CRLF;
+      outputStream.write(response.getBytes(StandardCharsets.UTF_8));
+      System.out.println("201 Created response sent");    }
   }
 
   private static void handleFileRequest(OutputStream outputStream, String fileName) throws IOException {
