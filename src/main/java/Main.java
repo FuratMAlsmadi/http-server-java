@@ -94,7 +94,12 @@ public class Main {
         }
       }
       int contentLength = Integer.parseInt(contentLen.trim());
-      String requestbody = readBody(reader, contentLength);
+      String requestbody = "";
+      if(contentLen.isEmpty())  
+        readBody(reader, 0);
+      else
+        readBody(reader, contentLength)
+
 
       HttpRequest request = parseRequest(requestHeaders, requestbody);
 
@@ -135,8 +140,10 @@ public class Main {
     return headers;
   }
 
-
   private static String readBody(BufferedReader reader, int contentLength) throws IOException {
+    if (contentLength == 0) {
+      return ""; // Return early if content length is 0
+    }
     char[] body = new char[contentLength];
     int bytesRead = reader.read(body, 0, contentLength);
     return new String(body, 0, bytesRead);
@@ -149,7 +156,7 @@ public class Main {
 
     String requestLine = headers.get(0);
     String[] requestParts = requestLine.split(" ");
-    // "POST /files/file_123 HTTP/1.1"
+
     if ("POST".equals(requestParts[0].trim())) {
       String path = requestParts[1];
       String[] pathParts = path.split("/");
@@ -232,7 +239,8 @@ public class Main {
     } catch (FileAlreadyExistsException e) {
       String response = HTTP_CREATED + CRLF + CRLF;
       outputStream.write(response.getBytes(StandardCharsets.UTF_8));
-      System.out.println("201 Created response sent");    }
+      System.out.println("201 Created response sent");
+    }
   }
 
   private static void handleFileRequest(OutputStream outputStream, String fileName) throws IOException {
