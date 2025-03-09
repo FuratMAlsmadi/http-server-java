@@ -1,4 +1,5 @@
 import java.io.BufferedReader;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
@@ -13,10 +14,10 @@ import java.nio.file.Paths;
 import java.nio.file.StandardOpenOption;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.LinkedHashMap;
+import java.util.Base64;
 import java.util.List;
-import java.util.Map;
 import java.util.Objects;
+import java.util.zip.GZIPOutputStream;
 
 /**
  * A simple HTTP server that responds to GET requests.
@@ -46,6 +47,36 @@ public class Main {
     public String getHeaderValue() {
       return this.headerValue;
     }
+  }
+
+  private enum ContentEncoding {
+    GZIP("Content-Encoding: gzip");
+
+    private final String contentEncodingHeaderValue;
+
+    ContentEncoding(String contentEncodingHeaderValue) {
+      this.contentEncodingHeaderValue = contentEncodingHeaderValue;
+    }
+
+    public String getContentEncodingHeaderValue() {
+      return this.contentEncodingHeaderValue;
+    }
+  }
+
+  private enum AcceptedEncoding {
+    GZIP("gzip"),
+    INVALID("default");
+
+    private final String acceptedEncodingValue;
+
+    AcceptedEncoding(String acceptedEncodingValue) {
+      this.acceptedEncodingValue = acceptedEncodingValue;
+    }
+
+    public String getAcceptedEncodingValue() {
+      return this.acceptedEncodingValue;
+    }
+
   }
 
   public static void main(String[] args) {
@@ -93,6 +124,7 @@ public class Main {
         }
       }
 
+      
       int contentLength = contentLen.trim().isEmpty() ? 0 : Integer.parseInt(contentLen.trim());
 
       String requestbody = "";
@@ -106,7 +138,7 @@ public class Main {
       // Handle the request based on its type
       switch (request.getType()) {
         case ECHO:
-          handleEchoRequest(clientSocket.getOutputStream(), request.getContent());
+          handleEchoRequest(clientSocket.getOutputStream(), request.getContent(), request.getAcceptedEncoding());
           break;
         case USER_AGENT:
           handleUserAgentRequest(clientSocket.getOutputStream(), request.getUserAgent());
@@ -151,7 +183,7 @@ public class Main {
 
   private static HttpRequest parseRequest(List<String> headers, String body) {
     if (headers.isEmpty()) {
-      return new HttpRequest(RequestType.UNKNOWN, "", "");
+      return new HttpRequest(RequestType.UNKNOWN, "", "", null);
     }
 
     String requestLine = headers.get(0);
@@ -161,11 +193,11 @@ public class Main {
       String path = requestParts[1];
       String[] pathParts = path.split("/");
       String fileName = pathParts[2];
-      return new HttpRequest(RequestType.POST, body, fileName);
+      return new HttpRequest(RequestType.POST, body, fileName, null);
     } else {
       if (requestParts.length < 2) {
         System.out.println("Invalid request format: " + requestLine);
-        return new HttpRequest(RequestType.UNKNOWN, "", "");
+        return new HttpRequest(RequestType.UNKNOWN, "", "", null);
       }
 
       String path = requestParts[1];
@@ -180,26 +212,50 @@ public class Main {
           break;
         }
       }
+
+      String acceptedEncodingValue = "";
+      for (String header : headers) {
+        if (header.startsWith("Accept-Encoding: ")) {
+          acceptedEncodingValue = header.substring("Accept-Encoding: ".length());
+          break;
+        }
+      }
+
+      AcceptedEncoding acceptedEncoding = AcceptedEncoding.INVALID;
+      if (acceptedEncodingValue != null) {
+        if (acceptedEncodingValue.contains(AcceptedEncoding.GZIP.getAcceptedEncodingValue())) {
+          acceptedEncoding = AcceptedEncoding.GZIP;
+        }
+      }
+
       if (pathParts.length == 0) {
-        return new HttpRequest(RequestType.EMPTY, "", userAgent);
+        return new HttpRequest(RequestType.EMPTY, "", userAgent, acceptedEncoding);
       }
       if (pathParts.length >= 3 && "echo".equals(pathParts[1])) {
-        return new HttpRequest(RequestType.ECHO, pathParts[2], userAgent);
+        return new HttpRequest(RequestType.ECHO, pathParts[2], userAgent, acceptedEncoding);
       } else if (pathParts.length >= 2 && "user-agent".equals(pathParts[1])) {
-        return new HttpRequest(RequestType.USER_AGENT, "", userAgent);
+        return new HttpRequest(RequestType.USER_AGENT, "", userAgent, acceptedEncoding);
       } else if (pathParts.length >= 3 && "files".equals(pathParts[1])) {
-        return new HttpRequest(RequestType.FILE, pathParts[2], userAgent);
-      } else if (pathParts.length >= 3 && "files".equals(pathParts[1])) {
-        return new HttpRequest(RequestType.FILE, pathParts[2], userAgent);
+        return new HttpRequest(RequestType.FILE, pathParts[2], userAgent, acceptedEncoding);
       } else {
-        return new HttpRequest(RequestType.UNKNOWN, "", userAgent);
+        return new HttpRequest(RequestType.UNKNOWN, "", userAgent, acceptedEncoding);
       }
     }
   }
 
-  private static void handleEchoRequest(OutputStream outputStream, String content) throws IOException {
-    String response = buildResponse(HTTP_OK, ContentType.TXTPLAIN, content);
-    outputStream.write(response.getBytes(StandardCharsets.UTF_8));
+  private static void handleEchoRequest(OutputStream outputStream, String content, AcceptedEncoding bodyEncoding)
+      throws IOException {
+    switch (bodyEncoding) {
+      case AcceptedEncoding.GZIP:
+        String encodedResponse = buildEncodedResponse(HTTP_OK, ContentType.TXTPLAIN, content, ContentEncoding.GZIP);
+        outputStream.write(encodedResponse.getBytes(StandardCharsets.UTF_8));
+        break;
+      default:
+        String response = buildResponse(HTTP_OK, ContentType.TXTPLAIN, content);
+        outputStream.write(response.getBytes(StandardCharsets.UTF_8));
+        break;
+    }
+
     System.out.println("Echo response sent with content: " + content);
   }
 
@@ -269,15 +325,56 @@ public class Main {
         body;
   }
 
+  private static String buildEncodedResponse(String status, ContentType contentType, String body,ContentEncoding contentEncoding) {
+    switch (contentEncoding) {
+      case ContentEncoding.GZIP:
+        try {
+          // Convert the string to bytes
+          byte[] inputBytes = body.getBytes("UTF-8");
+          
+          // Create output streams
+          ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+          GZIPOutputStream gzipOutputStream = new GZIPOutputStream(outputStream);
+          
+          // Write the input bytes to the GZIP output stream
+          gzipOutputStream.write(inputBytes);
+          
+          // Close the GZIP output stream
+          gzipOutputStream.close();
+          
+          // Get the compressed bytes
+          byte[] compressedBytes = outputStream.toByteArray();
+          
+          // Encode the compressed bytes as Base64
+          body = Base64.getEncoder().encodeToString(compressedBytes);
+        } catch (IOException e) {
+          // Handle the exception, maybe log it or set a default response
+          e.printStackTrace();
+        }
+        break;
+      default:
+        break;
+    }
+
+    return status + CRLF +
+        contentType.getHeaderValue() + CRLF +
+        contentEncoding.getContentEncodingHeaderValue() + CRLF +
+        "Content-Length: " + body.length() + CRLF +
+        CRLF +
+        body;
+  }
+
   private static final class HttpRequest {
     private final RequestType type;
     private final String content;
     private final String userAgent;
+    private final AcceptedEncoding acceptedEncoding;
 
-    HttpRequest(RequestType type, String content, String userAgent) {
+    HttpRequest(RequestType type, String content, String userAgent, AcceptedEncoding acceptedEncoding) {
       this.type = Objects.requireNonNull(type);
       this.content = Objects.requireNonNull(content);
       this.userAgent = Objects.requireNonNull(userAgent);
+      this.acceptedEncoding = acceptedEncoding != null ? acceptedEncoding : AcceptedEncoding.INVALID;
     }
 
     RequestType getType() {
@@ -291,5 +388,10 @@ public class Main {
     String getUserAgent() {
       return userAgent;
     }
+
+    AcceptedEncoding getAcceptedEncoding() {
+      return acceptedEncoding;
+    }
+
   }
 }
