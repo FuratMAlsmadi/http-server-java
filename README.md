@@ -8,7 +8,6 @@ This repository contains a starting point for Java solutions to the [CodeCrafter
 - [Features](#features)
 - [Prerequisites](#prerequisites)
 - [Compilation & Running](#compilation--running)
-- [Challenge Stages](#challenge-stages)
 - [Project Structure](#project-structure)
 - [Contributing](#contributing)
 - [License](#license)
